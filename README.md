@@ -1,1 +1,1 @@
-# CosmoTransicions
+# CosmoTransitions
