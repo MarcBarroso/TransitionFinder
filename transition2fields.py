@@ -373,17 +373,18 @@ def CheckCouplings(param):
             if condition1:
                 stability = CheckStability(l1, l2, l3, gx)
                 f = open('2fields.txt', 'a')
-                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(masses[0])+ ' '+str(masses[0])+' '+str(masses[1])
+                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(masses[0])+' '+str(masses[1])
                 line0 = line0 + ' '+str(stability)
                 f.write(line0+'\n')
                 f.write('-'*90+'\n')
                 f.close()
 
 def FindCouplings():
-    l1v = np.linspace(0, 0.2, num=40)
-    l2v = np.linspace(-0.01, 0.01, num=50)
-    l3v = np.linspace(-0.02, 0, num=40)
-    gxv = np.linspace(0.5, 1, num=20)
+    l1v = np.linspace(0, 0.2, num=50)
+    #l2v = np.linspace(-0.01, 0, num=50)
+    l2v = np.logspace(-2, -10, 50)
+    l3v = np.linspace(-0.02, 0, num=50)
+    gxv = np.linspace(0.2, 1, num=50)
     p = multiprocessing.Pool()
     f = open('2fields.txt', 'w+')
     line = '|l1--l2--l3--gx--minima--mass1--mass2--stable|'
@@ -410,7 +411,6 @@ if __name__ == "__main__":
     T = 0.0
 
     FindCouplings()
-
     """
     m = model1(0.124, -0.003, -0.0047, y_t_interpol(np.log(v/mz)), 0.85)
     minima, success = m.findMinimum((v2**.5, 2000), T)
