@@ -8,18 +8,40 @@ import numdifftools as nd
 import warnings
 import time
 
+file_name = '2fields.txt' #name of the file where the points are going to be saved
+"""
+We first define some physical constant that we will use later.
+mh = Higgs mass
+mz = Z gauge boson mass
+mw = W gauge boson mass
+mp = Planck mass
+"""
 mh = 125.18
 mz = 91.1876
 mw = 80.379
 mp = 2.435*10**(18)
+"""
+We define the sin(theta_W)^2, where theta_W is the Weinberg angle
+Alpha is the coupling constant of electromagnetism, and alpha_s the coupl. const. of the strong interaction. We will need them to compute the beta functions
+"""
 s2thetaW = 0.23122
 alpha = 1.0/128.0
+alpha_s = 0.1182
+"""
+We now define the couplings of the electro and weak parts, squared
+"""
 g2W = 4.0*np.pi*alpha/s2thetaW
 gp2W = 4.0*np.pi*alpha/(1.0-s2thetaW)
+"""
+And the vev of the Higgs boson
+"""
 v = 2.0*mw/np.sqrt(g2W)
 v2 = v*v
-alpha_s = 0.1182
 
+"""
+We define the beta functions of some of the couplings, and solve for the gauge ones which can be done analytically.
+As before, gs2 is the coupling of the strong interaction, squared. g2 for electromagnetism, g2p for the weak
+"""
 def gs2(x):
     return 4.0*np.pi*alpha_s/(1.0+7.0/2.0*alpha_s/np.pi*x)
 
@@ -30,11 +52,21 @@ def gp2(x):
     return gp2W**2/(1.0-41.0/(48.0*np.pi**2)*gp2W**2*x)
 
 def beta_top(y, x):
+    """
+    This is the beta function of the top quark. Careful with the conventions used.
+    Input: y - value of the Yukawa top coupling. x - log(energy) we are studying
+    Output: value of the beta function at the point x
+    """
     y_t = y
     dydx = 1/(16.0*np.pi)*(9.0/2.0*y_t**3-8.0*gs2(x)*y_t-9.0/4.0*g2(x)*y_t-17.0/12.0*gp2(x)*y_t)
     return dydx
 
 def beta_l(y, x, y_t_interpol):
+    """
+    Beta function for l1, l2, l3 and gx, all at once.
+    Input: y - list with the values of l1, l2, l3 and gx. x - log(energy) we are studying. y_t_interpol - interpolated function for the Yukawa top coupling.
+    Output: list with the value of the beta functions at the point x
+    """
     l1, l2, l3, gx = y
     beta_l1 = (12*l1**2+l2**2+0.5*l1*(-9.0*g2(x)-3.0*gp2(x)+12.0*y_t_interpol(x)**2)+3.0/8.0*g2(x)**2+3.0*(g2(x)+gp2(x))**2/16.0-3.0*y_t_interpol(x)**4)
     beta_l1 = 1.0/(8.0*np.pi**2)*beta_l1
@@ -46,29 +78,15 @@ def beta_l(y, x, y_t_interpol):
 
 class model1(generic_potential.generic_potential):
     """
-    A sample model which makes use of the *generic_potential* class.
-
-    This model doesn't have any physical significance. Instead, it is chosen
-    to highlight some of the features of the *generic_potential* class.
-    It consists of two scalar fields labeled *phi1* and *phi2*, plus a mixing
-    term and an extra boson whose mass depends on both fields.
-    It has low-temperature, mid-temperature, and high-temperature phases, all
-    of which are found from the *getPhases()* function.
+    Model for the case with the Higgs scalar + the SU(2)_X sector.
     """
     def init(self, l1, l2, l3, yt, gx):
         """
-          m1 - tree-level mass of first singlet when mu = 0.
-          m2 - tree-level mass of second singlet when mu = 0.
-          mu - mass coefficient for the mixing term.
-          Y1 - Coupling of the extra boson to the two scalars individually
-          Y2 - Coupling to the two scalars together: m^2 = Y2*s1*s2
-          n - degrees of freedom of the boson that is coupling.
+        l1, l2, l3 - couplings in the potential, defines at the energy v (VEV of the Higgs, around 246 GeV)
+        gx - coupling of the X gauge boson
+        yt - value of the Yukawa coupling of the top quark at v
+        n - degrees of freedom of the boson that is coupling.
         """
-        # The init method is called by the generic_potential class, after it
-        # already does some of its own initialization in the default __init__()
-        # method. This is necessary for all subclasses to implement.
-
-        # This first line is absolutely essential in all subclasses.
         # It specifies the number of field-dimensions in the theory.
         self.Ndim = 2
 
@@ -77,16 +95,15 @@ class model1(generic_potential.generic_potential):
         self.renormScaleSq = v2
 
         # This next block sets all of the parameters that go into the potential
-        # and the masses. This will obviously need to be changed for different
-        # models.
+        # and the masses.
         self.l1 = l1
         self.l2 = l2
         self.l3 = l3
         self.gx = gx
+        self.yt = yt
 
         self.g  = np.sqrt(g2(np.log(v/mz)))
         self.gp = np.sqrt(gp2(np.log(v/mz)))
-        self.yt = yt
         self.n1 = 9
         self.n2 = 9
         self.n3 = 9
@@ -107,9 +124,7 @@ class model1(generic_potential.generic_potential):
 
     def V0(self, X):
         """
-        This method defines the tree-level potential. It should generally be
-        subclassed. (You could also subclass Vtot() directly, and put in all of
-        quantum corrections yourself).
+        This method defines the tree-level potential.
         """
         # X is the input field array. It is helpful to ensure that it is a
         # numpy array before splitting it into its components.
@@ -125,14 +140,19 @@ class model1(generic_potential.generic_potential):
         return r
 
     def boson_massSq(self, X, T):
+        """
+        Computation of the value of the boson masses squared.
+        Input: X - point in field space. T - temperature.
+        Output: M - array with the masses squared. c - renormalization constants. dof - degrees of freedom
+        """
         XT = np.array(X)
-        X = XT.reshape(XT.size/2, 2)
+        X = XT.reshape(XT.size/2, 2) #Since we can overload our input by passing an array of points, we have to make sure to be dealing with it point by point.
         m1 = np.empty([0,0])
         m2 = np.empty([0,0])
         mb1 = np.empty([0,0])
         mb2 = np.empty([0,0])
         mb3 = np.empty([0,0])
-        #ddV0 = nd.Hessian(self.V0)
+        #ddV0 = nd.Hessian(self.V0) Uncomment this and the lines below if the hessian is to be computed numerically directly from V0
         for vec in X:
             phi1 = vec[0]
             phi2 = vec[1]
@@ -141,21 +161,19 @@ class model1(generic_potential.generic_potential):
             #print hess
             #eigen =  np.linalg.eigvalsh(hess)
 
-            MSQ = np.array([[3*self.l1*phi1*phi1+0.5*self.l2*phi2*phi2, self.l2*phi1*phi2],
+            MSQ = np.array([[3*self.l1*phi1*phi1+0.5*self.l2*phi2*phi2, self.l2*phi1*phi2], #We can compute the matrix of second derivatives by hand in this case
                            [self.l2*phi1*phi2, 3*self.l3*phi2*phi2+0.5*self.l2*phi1*phi1]])
 
-            eigen = np.linalg.eigvalsh(MSQ)
+            eigen = np.linalg.eigvalsh(MSQ) #and just ask for the eigenvalues
 
             m1 = np.append(m1, eigen[0])
             m2 = np.append(m2, eigen[1])
-            mb1t = (0.5*self.g*phi1)**2
-            mb2t = (0.5*self.gp*phi1)**2 + (0.5*self.g*phi1)**2
-            mb3t = (0.5*self.gx*phi2)**2
-            mb1 = np.append(mb1, mb1t)
-            mb2 = np.append(mb2, mb2t)
-            mb3 = np.append(mb3, mb3t)
 
-        if(X.shape[0] == 1):
+            mb1 = np.append(mb1, (0.5*self.g*phi1)**2) #here we compute the mass of the gauge bosons
+            mb2 = np.append(mb2, (0.5*self.gp*phi1)**2 + (0.5*self.g*phi1)**2)
+            mb3 = np.append(mb3, (0.5*self.gx*phi2)**2)
+
+        if(X.shape[0] == 1): #PLACEHOLDER: just making sure that the end result is consistent
             M = np.array([m1[0], m2[0], mb1[0], mb2[0], mb3[0]])
         else:
             M = np.array([m1, m2, mb1, mb2, mb3])
@@ -189,9 +207,6 @@ class model1(generic_potential.generic_potential):
 
     def fermion_massSq(self, X):
         """
-        Calculate the fermion particle spectrum. Should be overridden by
-        subclasses.
-
         Parameters
         ----------
         X : array_like
@@ -209,12 +224,6 @@ class model1(generic_potential.generic_potential):
             The number of degrees of freedom for each particle. If an array
             (i.e., different particles have different d.o.f.), it should have
             length `Ndim`.
-
-        Notes
-        -----
-        Unlike :func:`boson_massSq`, no constant `c` is needed since it is
-        assumed to be `c = 3/2` for all fermions. Also, no thermal mass
-        corrections are needed.
         """
         # The following is an example placeholder which has the correct output
         # shape. Since dof is zero, it does not contribute to the potential.
@@ -227,20 +236,11 @@ class model1(generic_potential.generic_potential):
         dof = np.array([4])
         return massSq, dof
 
-    def approxZeroTMin(self):
-        # There are generically two minima at zero temperature in this model,
-        # and we want to include both of them.
-        return [np.array([v2**.5,2411])]
-
-
-    def findMinimum(self, X=None, T=0.0):
+    def findMinimum(self, X=np.array([v, 2000]), T=0.0):
         """
         Convenience function for finding the nearest minimum to `X` at
         temperature `T`.
         """
-        if X is None:
-            X = self.approxZeroTMin()[0]
-
         bnds = ((0, None), (0, None))
         min1 = minimize(self.Vtot, X, args=(T,), method='L-BFGS-B', bounds=bnds, tol=1e-8)
         min0 = self.Vtot((0,0), T)
@@ -248,41 +248,6 @@ class model1(generic_potential.generic_potential):
             return min1.x, min1.success
         else:
             return np.empty([2]), min1.success
-
-    def dV(self, mT=0.0):
-        minimum = self.findMinimum((v2**.5,2411), T)
-        dV =  self.Vtot(minima, 0.0) - self.Vtot([0.0, 0.0], 0.0)
-        return dV
-
-    def plot3d(self, box, T=0, offset=0,
-               xaxis=0, yaxis=1, n=50, clevs=200, cfrac=.8, **contourParams):
-        import matplotlib.pyplot as plt
-        from matplotlib import cm
-        xmin,xmax,ymin,ymax = box
-        X = np.linspace(xmin, xmax, n).reshape(n,1)*np.ones((1,n))
-        Y = np.linspace(ymin, ymax, n).reshape(1,n)*np.ones((n,1))
-        XY = np.zeros((n,n,self.Ndim))
-        XY[...,xaxis], XY[...,yaxis] = X,Y
-        XY += offset
-        Z = self.Vtot(XY,T)
-        minZ, maxZ = min(Z.ravel()), max(Z.ravel())
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-        surf = ax.plot_surface(X, Y, Z, cmap=cm.coolwarm,
-                               linewidth=0, antialiased=True)
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
-        fig.colorbar(surf, shrink=0.5, aspect=5)
-        plt.show()
-
-def makePlots(m, T, xlow, xhigh, ylow, yhigh):
-    boxlowx = xlow
-    boxhighx = xhigh
-    boxlowy = ylow
-    boxhighy = yhigh
-    m.plot3d((boxlowx, boxhighx, boxlowy, boxhighy), T)
-    #m.plot2d((boxlowx, boxhighx, boxlowy, boxhighy), T)
 
 def allMinima(m, n, Tmin, Thigh):
     temp = np.linspace(Tmin, Thigh, num=n)
@@ -298,6 +263,11 @@ def allMinima(m, n, Tmin, Thigh):
     plt.show()
 
 def VatSomePoint(m, X, T):
+    """
+    Implementation of a sanity check.
+    Input: m - model we are studying. X - point in field space. T - temperature.
+    Output: print of the tree-level, one-loop and thermal correction of the potential of model m at point X and temperature T
+    """
     bosons = m.boson_massSq(X,T)
     fermions = m.fermion_massSq(X)
 
@@ -307,6 +277,21 @@ def VatSomePoint(m, X, T):
     print "Tree-level + one-loop correction: ", m.V0(X)+m.V1(bosons, fermions)
     print "Sum of tree+one loop+thermal: ", m.Vtot(X, T)
     print "--------------------------------------------------------"
+
+def CheckModel(m):
+    """
+    Just checks the minima of the model m, the masses of the particles and whether it is stable or not
+    Input: model m
+    Output: prints the information
+    """
+    minima, success = m.findMinimum((v2**.5, 2000), T)
+    print "Minimum at T = ", T, ": ", minima, success
+
+    print "Masses: "
+    ddVtot = nd.Hessian(m.Vtot_0T)
+    hess = ddVtot(minima)
+    print np.sqrt(np.linalg.eigvalsh(hess))
+    print 'Stable: ', CheckStability(m.l1, m.l2, m.l3, m.gx)
 
 def cartesian(arrays, out=None):
     """
@@ -340,10 +325,15 @@ def cartesian(arrays, out=None):
     return out
 
 def CheckStability(l1, l2, l3, gx):
+    """
+    Checks if the combination l1, l2, l3 and gx satisfy the positivity condition at the Planck scale.
+    Input: l1, l2, l3 and gx.
+    Output: 1 if the model is stable, 0 otherwise.
+    """
     y0 = [l1, l2, l3, gx]
     xmin = np.log(v/mz)
     xmax = np.log(mp/mz)
-    N = 1000
+    N = 1000 #This changes the amount of points in our numerical solution of the beta functions
     x = np.linspace(xmin, xmax, N)
     sol_l = odeint(beta_l, y0, x, args=(y_t_interpol,))
     l1mp = sol_l[N-1, 0]
@@ -354,39 +344,49 @@ def CheckStability(l1, l2, l3, gx):
             return 1
     return 0
 
-def CheckCouplings(param):
-    l1 = param[0]
-    l2 = param[1]
-    l3 = param[2]
-    gx = param[3]
+def CheckCouplings(params):
+    """
+    Checks whether the parameters sent in the array param correspond to a physical model (i.e. if one of the minima are close to the Higgs v (experimentally verified) and if one of the masses correspond to the Higgs mass (exp. verified as well).
+    Input: params - array of l1, l2, l3 and gx.
+    Output: the function will append the point to a file (file_name) if it corresponds to a physical model.
+    """
+    l1 = params[0]
+    l2 = params[1]
+    l3 = params[2]
+    gx = params[3]
     m = model1(l1, l2, l3, y_t_interpol(np.log(v/mz)) , gx)
-    minima, success = m.findMinimum((v,2000), 0.0)
-    condition0 = (abs(minima[0]-v) < 5 or abs(minima[1]-v) < 5) and success
+    minima, success = m.findMinimum((v,2000), 0.0) #the boolean success is added because we cannot trust the minima if numpy.optimize.minimize has failed
+    condition0 = (abs(minima[0]-v) < 2 or abs(minima[1]-v) < 2) and success
     if condition0:
     	ddVtot = nd.Hessian(m.Vtot_0T)
         hess = ddVtot(minima)
-        masses = np.linalg.eigvalsh(hess)
+        masses = np.linalg.eigvalsh(hess) #computes masses...
         positive_condition = masses > 0
-        if(positive_condition.all()):
+        if(positive_condition.all()): #we will only check them IF they are positive
             masses = np.sqrt(np.abs(masses))
-            condition1 = abs(masses[0]-mh) < 5 or abs(masses[1]-mh) < 5
+            condition1 = abs(masses[0]-mh) < 2 or abs(masses[1]-mh) < 2
             if condition1:
-                stability = CheckStability(l1, l2, l3, gx)
-                f = open('2fields.txt', 'a')
-                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(masses[0])+' '+str(masses[1])
+                stability = CheckStability(l1, l2, l3, gx) #we check the stability of the model
+                f = open(file_name, 'a')
+                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(masses[0])+' '+str(masses[1]) #we print everything
                 line0 = line0 + ' '+str(stability)
                 f.write(line0+'\n')
                 f.write('-'*90+'\n')
                 f.close()
 
 def FindCouplings():
+    """
+    We get points to check, and parallelize the checking of the points. This is the function that does all the work in terms of exploring the parameter space.
+    Input : -
+    Output: -
+    """
     l1v = np.linspace(0, 0.2, num=50)
     #l2v = np.linspace(-0.01, 0, num=50)
     l2v = np.logspace(-2, -10, 50)
     l3v = np.linspace(-0.02, 0, num=50)
     gxv = np.linspace(0.2, 1, num=50)
     p = multiprocessing.Pool()
-    f = open('2fields.txt', 'w+')
+    f = open(file_name, 'w+')
     line = '|l1--l2--l3--gx--minima--mass1--mass2--stable|'
     f.write(line+'\n')
     f.write('-'*90+'\n')
@@ -398,6 +398,7 @@ def FindCouplings():
             p.map(CheckCouplings, params)
             print("--- Loop has taken: %s seconds ---" % (time.time() - start_time_loop))
 
+""" We do the computation of the Yukawa term. It is first defined at 173GeV, the value of the top mass, as 0.9. Then it is computed at the v scale """
 xmin = np.log(173.0/mz)
 xmax = np.log(mp/mz) + 20.0
 y0 = 0.9
@@ -408,30 +409,10 @@ y_t_interpol = interp1d(x, np.asarray(sol_y_t).squeeze(), kind='cubic')
 if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=FutureWarning)
     start_time = time.time()
-    T = 0.0
 
     FindCouplings()
-    """
-    m = model1(0.124, -0.003, -0.0047, y_t_interpol(np.log(v/mz)), 0.85)
-    minima, success = m.findMinimum((v2**.5, 2000), T)
-    print "Minimum at T = ", T, ": ", minima, success
 
-    print "Masses: "
-    ddVtot = nd.Hessian(m.Vtot_0T)
-    hess = ddVtot(minima)
-    print np.sqrt(np.linalg.eigvalsh(hess))
-    print 'Stable: ', CheckStability(m.l1, m.l2, m.l3, m.gx)
-    """
-    #VatSomePoint(m, minima, T)
+    #m = model1(0.124, -0.003, -0.0047, y_t_interpol(np.log(v/mz)), 0.85)
+    #CheckModel(m)
 
-    #allMinima(m, 100, 200, 400)
-    #m.findAllTransitions()
-    #m.phases.pop(3)
-    #print m.TnTrans
-    #plt.figure()
-    #m.plotPhasesPhi()
-    #plt.axis([0,700,-50,20000])
-    #plt.title("Minima as a function of temperature")
-    #plt.show()
-    #m.calcTcTrans()
     print("--- %s seconds ---" % (time.time() - start_time))
