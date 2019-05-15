@@ -1,13 +1,48 @@
 from scipy.optimize import minimize
 import numpy as np
 from cosmoTransitions import generic_potential
-import multiprocessing as mp
+from scipy.integrate import odeint
+from scipy.interpolate import interp1d
+import multiprocessing
 import numdifftools as nd
 import warnings
-
 import time
 
-v2 = 246.**2
+mh = 125.18
+mz = 91.1876
+mw = 80.379
+mp = 2.435*10**(18)
+s2thetaW = 0.23122
+alpha = 1.0/128.0
+g2W = 4.0*np.pi*alpha/s2thetaW
+gp2W = 4.0*np.pi*alpha/(1.0-s2thetaW)
+v = 2.0*mw/np.sqrt(g2W)
+v2 = v*v
+alpha_s = 0.1182
+
+def gs2(x):
+    return 4.0*np.pi*alpha_s/(1.0+7.0/2.0*alpha_s/np.pi*x)
+
+def g2(x):
+    return g2W**2/(1.0+19.0/(48.0*np.pi**2)*g2W**2*x)
+
+def gp2(x):
+    return gp2W**2/(1.0-41.0/(48.0*np.pi**2)*gp2W**2*x)
+
+def beta_top(y, x):
+    y_t = y
+    dydx = 1/(16.0*np.pi)*(9.0/2.0*y_t**3-8.0*gs2(x)*y_t-9.0/4.0*g2(x)*y_t-17.0/12.0*gp2(x)*y_t)
+    return dydx
+
+def beta_l(y, x, y_t_interpol):
+    l1, l2, l3, gx = y
+    beta_l1 = (12*l1**2+l2**2+0.5*l1*(-9.0*g2(x)-3.0*gp2(x)+12.0*y_t_interpol(x)**2)+3.0/8.0*g2(x)**2+3.0*(g2(x)+gp2(x))**2/16.0-3.0*y_t_interpol(x)**4)
+    beta_l1 = 1.0/(8.0*np.pi**2)*beta_l1
+    beta_l2 = 1.0/(8.0*np.pi**2)*(6.0*l1*l2+2.0*l2**2+6.0*l2*l3+0.25*l2*(-9.0*g2(x)-3.0*gp2(x)+12.0*y_t_interpol(x)**2-9.0*gx**2))
+    beta_l3 = 1.0/(8.0*np.pi**2)*(l2**2+12.0*l3**2-9.0/2.0*l3*gx**2+9.0/16.0*gx**4)
+    beta_gx = 1.0/(16.0*np.pi**2)*(-43.0/6.0*gx**3-1.0/(4.0*np.pi)**2*256.0/6.0*gx**5)
+    dydx = [beta_l1, beta_l2, beta_l3, beta_gx]
+    return dydx
 
 class model1(generic_potential.generic_potential):
     """
@@ -49,11 +84,8 @@ class model1(generic_potential.generic_potential):
         self.l3 = l3
         self.gx = gx
 
-        sOW2    = 0.23122
-        sOW     = np.sqrt(sOW2)
-        e       = 0.3028221208
-        self.g  = e/sOW
-        self.gp = e/(2*sOW*np.sqrt(1-sOW2))
+        self.g  = np.sqrt(g2(np.log(v/mz)))
+        self.gp = np.sqrt(gp2(np.log(v/mz)))
         self.yt = yt
         self.n1 = 9
         self.n2 = 9
@@ -210,7 +242,7 @@ class model1(generic_potential.generic_potential):
             X = self.approxZeroTMin()[0]
 
         bnds = ((0, None), (0, None))
-        min1 = minimize(self.Vtot, X, args=(T,), method='TNC', bounds=bnds, tol=1e-6)
+        min1 = minimize(self.Vtot, X, args=(T,), method='L-BFGS-B', bounds=bnds, tol=1e-8)
         min0 = self.Vtot((0,0), T)
         if self.Vtot(min1.x, T) < min0:
             return min1.x, min1.success
@@ -245,12 +277,12 @@ class model1(generic_potential.generic_potential):
         plt.show()
 
 def makePlots(m, T, xlow, xhigh, ylow, yhigh):
-        boxlowx = xlow
-        boxhighx = xhigh
-        boxlowy = ylow
-        boxhighy = yhigh
-        m.plot3d((boxlowx, boxhighx, boxlowy, boxhighy), T)
-        #m.plot2d((boxlowx, boxhighx, boxlowy, boxhighy), T)
+    boxlowx = xlow
+    boxhighx = xhigh
+    boxlowy = ylow
+    boxhighy = yhigh
+    m.plot3d((boxlowx, boxhighx, boxlowy, boxhighy), T)
+    #m.plot2d((boxlowx, boxhighx, boxlowy, boxhighy), T)
 
 def allMinima(m, n, Tmin, Thigh):
     temp = np.linspace(Tmin, Thigh, num=n)
@@ -307,51 +339,80 @@ def cartesian(arrays, out=None):
             out[j*m:(j+1)*m,1:] = out[0:m,1:]
     return out
 
+def CheckStability(l1, l2, l3, gx):
+    y0 = [l1, l2, l3, gx]
+    xmin = np.log(v/mz)
+    xmax = np.log(mp/mz)
+    N = 1000
+    x = np.linspace(xmin, xmax, N)
+    sol_l = odeint(beta_l, y0, x, args=(y_t_interpol,))
+    l1mp = sol_l[N-1, 0]
+    l2mp = sol_l[N-1, 1]
+    l3mp = sol_l[N-1, 2]
+    if l1mp >= 0 and l3mp >= 0:
+        if l2mp >= -2.0*np.sqrt(l1mp*l3mp):
+            return 1
+    return 0
+
 def CheckCouplings(param):
     l1 = param[0]
     l2 = param[1]
     l3 = param[2]
     gx = param[3]
-    m = model1(l1, l2, l3, 0.9, gx)
-    minima, success = m.findMinimum((v2**.5,2000), 0.0)
-    condition0 = (abs(minima[0]-246) < 10 or abs(minima[1]-246) < 10) and success
+    m = model1(l1, l2, l3, y_t_interpol(np.log(v/mz)) , gx)
+    minima, success = m.findMinimum((v,2000), 0.0)
+    condition0 = (abs(minima[0]-v) < 5 or abs(minima[1]-v) < 5) and success
     if condition0:
     	ddVtot = nd.Hessian(m.Vtot_0T)
-        hess = ddVtot(minima, 0.0)
+        hess = ddVtot(minima)
         masses = np.linalg.eigvalsh(hess)
         positive_condition = masses > 0
         if(positive_condition.all()):
             masses = np.sqrt(np.abs(masses))
-            condition1 = abs(masses[0]-125) < 5 or abs(masses[1]-125) < 5
+            condition1 = abs(masses[0]-mh) < 5 or abs(masses[1]-mh) < 5
             if condition1:
+                stability = CheckStability(l1, l2, l3, gx)
                 f = open('2fields.txt', 'a')
-                line0 = '| l1 = '+str(l1)+' l2 = '+str(l2)+' l3 = '+str(l3)+' gx = '+str(gx)+' minima: '+str(minima)+' masses: '+str(masses)
-                print line0
-                print '-'*90
+                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(masses[0])+ ' '+str(masses[0])+' '+str(masses[1])
+                line0 = line0 + ' '+str(stability)
                 f.write(line0+'\n')
                 f.write('-'*90+'\n')
                 f.close()
 
 def FindCouplings():
-    l1v = np.linspace(-1, 1, num=10)
-    l2v = np.linspace(-0.1, 0.1, num=10)
-    l3v = np.linspace(-1, 1, num=10)
-    gxv = np.linspace(-1, 1, num=10)
-    p = mp.Pool()
+    l1v = np.linspace(0, 0.2, num=40)
+    l2v = np.linspace(-0.01, 0.01, num=50)
+    l3v = np.linspace(-0.02, 0, num=40)
+    gxv = np.linspace(0.5, 1, num=20)
+    p = multiprocessing.Pool()
+    f = open('2fields.txt', 'w+')
+    line = '|l1--l2--l3--gx--minima--mass1--mass2--stable|'
+    f.write(line+'\n')
+    f.write('-'*90+'\n')
+    f.close()
     for l1 in l1v:
         for l2 in l2v:
-            for l3 in l3v:
-                params = cartesian((l1, l2, l3, gxv))
-                p.map(CheckCouplings, params)
+            start_time_loop = time.time()
+            params = cartesian((l1, l2, l3v, gxv))
+            p.map(CheckCouplings, params)
+            print("--- Loop has taken: %s seconds ---" % (time.time() - start_time_loop))
+
+xmin = np.log(173.0/mz)
+xmax = np.log(mp/mz) + 20.0
+y0 = 0.9
+x = np.linspace(xmin, xmax, 2000)
+sol_y_t = odeint(beta_top, y0, x)
+y_t_interpol = interp1d(x, np.asarray(sol_y_t).squeeze(), kind='cubic')
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=FutureWarning)
     start_time = time.time()
-    m = model1(0.07692307692307693, -0.0836734693877551, 0.02564102564102564, 0.9, 1.0)
     T = 0.0
 
-    #FindCouplings()
+    FindCouplings()
 
+    """
+    m = model1(0.124, -0.003, -0.0047, y_t_interpol(np.log(v/mz)), 0.85)
     minima, success = m.findMinimum((v2**.5, 2000), T)
     print "Minimum at T = ", T, ": ", minima, success
 
@@ -359,7 +420,8 @@ if __name__ == "__main__":
     ddVtot = nd.Hessian(m.Vtot_0T)
     hess = ddVtot(minima)
     print np.sqrt(np.linalg.eigvalsh(hess))
-
+    print 'Stable: ', CheckStability(m.l1, m.l2, m.l3, m.gx)
+    """
     #VatSomePoint(m, minima, T)
 
     #allMinima(m, 100, 200, 400)
@@ -373,6 +435,3 @@ if __name__ == "__main__":
     #plt.show()
     #m.calcTcTrans()
     print("--- %s seconds ---" % (time.time() - start_time))
-
-# Add thermal mass
-# Implement the Euclidean action.
