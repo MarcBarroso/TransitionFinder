@@ -1,3 +1,8 @@
+"""
+Transition 2 fields. This program explores the parameter space (as specified in FindCouplings()) and print out the possible physical points in field space.
+Authors: Daan Verweij, Marc Barroso.
+"""
+
 from scipy.optimize import minimize
 import numpy as np
 from cosmoTransitions import generic_potential
@@ -104,8 +109,8 @@ class model1(generic_potential.generic_potential):
 
         self.g  = np.sqrt(g2(np.log(v/mz)))
         self.gp = np.sqrt(gp2(np.log(v/mz)))
-        self.n1 = 9
-        self.n2 = 9
+        self.n1 = 6
+        self.n2 = 3
         self.n3 = 9
         self.n4 = 4
 
@@ -233,7 +238,7 @@ class model1(generic_potential.generic_potential):
         m1 = (self.yt*phi1/np.sqrt(2))**2
         massSq = np.empty(m1.shape + (Nfermions,))
         massSq[...,0] = m1
-        dof = np.array([4])
+        dof = np.array([12])
         return massSq, dof
 
     def findMinimum(self, X=np.array([v, 2000]), T=0.0):
@@ -242,7 +247,8 @@ class model1(generic_potential.generic_potential):
         temperature `T`.
         """
         bnds = ((0, None), (0, None))
-        min1 = minimize(self.Vtot, X, args=(T,), method='L-BFGS-B', bounds=bnds, tol=1e-8)
+        min1 = minimize(self.Vtot, X, args=(T,), method='L-BFGS-B', bounds=bnds, tol=1e-5)
+        print min1
         min0 = self.Vtot((0,0), T)
         if self.Vtot(min1.x, T) < min0:
             return min1.x, min1.success
@@ -278,14 +284,16 @@ def VatSomePoint(m, X, T):
     print "Sum of tree+one loop+thermal: ", m.Vtot(X, T)
     print "--------------------------------------------------------"
 
-def CheckModel(m):
+def CheckModel(params):
     """
     Just checks the minima of the model m, the masses of the particles and whether it is stable or not
     Input: model m
     Output: prints the information
     """
-    minima, success = m.findMinimum((v2**.5, 2000), T)
-    print "Minimum at T = ", T, ": ", minima, success
+    m = model1(params[0], params[1], params[2], y_t_interpol(np.log(v/mz)), params[3])
+
+    minima, success = m.findMinimum((v2**.5, 2000), 0.0)
+    print "Minimum at T = 0.0: ", minima, success
 
     print "Masses: "
     ddVtot = nd.Hessian(m.Vtot_0T)
@@ -356,7 +364,9 @@ def CheckCouplings(params):
     gx = params[3]
     m = model1(l1, l2, l3, y_t_interpol(np.log(v/mz)) , gx)
     minima, success = m.findMinimum((v,2000), 0.0) #the boolean success is added because we cannot trust the minima if numpy.optimize.minimize has failed
-    condition0 = (abs(minima[0]-v) < 2 or abs(minima[1]-v) < 2) and success
+    tolvevh = 2.0
+    tolmh = 2.0
+    condition0 = (abs(minima[0]-v) < tolvevh or abs(minima[1]-v) < tolvevh) and success
     if condition0:
     	ddVtot = nd.Hessian(m.Vtot_0T)
         hess = ddVtot(minima)
@@ -364,7 +374,7 @@ def CheckCouplings(params):
         positive_condition = masses > 0
         if(positive_condition.all()): #we will only check them IF they are positive
             masses = np.sqrt(np.abs(masses))
-            condition1 = abs(masses[0]-mh) < 2 or abs(masses[1]-mh) < 2
+            condition1 = abs(masses[0]-mh) < tolmh or abs(masses[1]-mh) < tolmh
             if condition1:
                 stability = CheckStability(l1, l2, l3, gx) #we check the stability of the model
                 f = open(file_name, 'a')
@@ -381,7 +391,6 @@ def FindCouplings():
     Output: -
     """
     l1v = np.linspace(0, 0.2, num=50)
-    #l2v = np.linspace(-0.01, 0, num=50)
     l2v = np.logspace(-2, -10, 50)
     l3v = np.linspace(-0.02, 0, num=50)
     gxv = np.linspace(0.2, 1, num=50)
@@ -395,6 +404,7 @@ def FindCouplings():
         for l2 in l2v:
             start_time_loop = time.time()
             params = cartesian((l1, l2, l3v, gxv))
+            print params.shape
             p.map(CheckCouplings, params)
             print("--- Loop has taken: %s seconds ---" % (time.time() - start_time_loop))
 
@@ -412,7 +422,6 @@ if __name__ == "__main__":
 
     FindCouplings()
 
-    #m = model1(0.124, -0.003, -0.0047, y_t_interpol(np.log(v/mz)), 0.85)
-    #CheckModel(m)
+    CheckModel((0.124, -0.003, -0.0047, 0.85))
 
     print("--- %s seconds ---" % (time.time() - start_time))
