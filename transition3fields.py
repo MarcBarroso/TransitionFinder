@@ -1,5 +1,5 @@
 """
-Transition 2 fields. This program explores the parameter space (as specified in FindCouplings()) and print out the possible physical points in field space.
+Transition 3 fields. This program explores the parameter space (as specified in FindCouplings()) and print out the possible physical points in field space.
 Authors: Daan Verweij, Marc Barroso.
 """
 
@@ -10,7 +10,7 @@ import numdifftools as nd
 import warnings
 import time
 
-file_name = '2fields.txt' #name of the file where the points are going to be saved
+file_name = '3fields_randsearch.txt' #name of the file where the points are going to be saved
 
 l1min = 0
 l1max = 0.2
@@ -21,29 +21,25 @@ l2max = 1e-10
 l3min = -0.02
 l3max = 0
 
+l4min = 0
+l4max = 0.1
+
+l5min = 0
+l5max = 0.1
+
+l6min = -0.2
+l6max = 0.2
+
 gxmin = 0.2
 gxmax = 1
-
-def allMinima(m, n, Tmin, Thigh):
-    temp = np.linspace(Tmin, Thigh, num=n)
-    pos = np.ndarray((n, 2))
-    for T in temp:
-        minimum = m.findMinimum(T=T)
-        pos = np.concatenate((pos, [minimum]), axis=0)
-
-    print pos
-    plt.figure()
-    plt.axis([-20, 300, -500, 3500])
-    plt.scatter(*zip(*pos))
-    plt.show()
 
 def CheckModel(params):
     """
     Just checks the minima of the model m, the masses of the particles and whether it is stable or not
-    Input: parameters of the model
+    Input: model m
     Output: prints the information
     """
-    m = model_2f(params[0], params[1], params[2], y_t_interpol(np.log(v/mz)), params[3])
+    m = model_3f(params[0], params[1], params[2], params[3], params[4], params[5], y_t_interpol(np.log(v/mz)), params[6])
 
     minima, success = m.findMinimum()
     print "Minimum at T = 0.0: ", minima, success
@@ -63,8 +59,11 @@ def CheckCouplings(params):
     l1 = params[0]
     l2 = params[1]
     l3 = params[2]
-    gx = params[3]
-    m = model_2f(l1, l2, l3, y_t_interpol(np.log(v/mz)), gx)
+    l4 = params[3]
+    l5 = params[4]
+    l6 = params[5]
+    gx = params[6]
+    m = model_3f(l1, l2, l3, l4, l5, l6, y_t_interpol(np.log(v/mz)), gx)
     minima, success = m.findMinimum() #the boolean success is added because we cannot trust the minima if numpy.optimize.minimize has failed
     tolvevh = 2.0
     tolmh = 2.0
@@ -80,30 +79,32 @@ def CheckCouplings(params):
             if condition1.any():
                 stability = m.CheckStability() #we check the stability of the model
                 f = open(file_name, 'a')
-                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(masses[0])+' '+str(masses[1]) #we print everything
-                line0 = line0 + ' '+str(stability)
+                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(l4)+' '+str(l5)+' '+str(l6)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(minima[2])+' '+str(masses[0])+' '+str(masses[1])+' '+str(masses[2])+' '+str(stability) #we print everything
                 f.write(line0+'\n')
                 f.write('-'*90+'\n')
                 f.close()
 
 def RandomFindCouplings():
-    points = 10000
+    points = 20000
     # Total points: points*multiprocessing.cpu_count()
     p = multiprocessing.Pool()
     f = open(file_name, 'w+')
-    line = '|l1--l2--l3--gx--minima--mass1--mass2--stable|'
+    line = '|l1--l2--l3--l4--l5--l6--gx--minima--mass1--mass2--mass3--stable|'
     f.write(line+'\n')
     f.write('-'*90+'\n')
     f.close()
     for i in range(points):
         start_time_loop = time.time()
-        params = np.array([[0,0,0,0]])
+        params = np.array([[0,0,0,0,0,0,0]])
         for j in range(multiprocessing.cpu_count()):
             l1 = np.random.uniform(l1min,l1max)
             l2 = np.random.uniform(l2min,l2max)
             l3 = np.random.uniform(l3min,l3max)
+            l4 = np.random.uniform(l4min,l4max)
+            l5 = np.random.uniform(l5min,l5max)
+            l6 = np.random.uniform(l6min,l6max)
             gx = np.random.uniform(gxmin,gxmax)
-            params1 = np.array([[l1, l2, l3, gx]])
+            params1 = np.array([[l1, l2, l3, l4, l5, l6, gx]])
             params = np.concatenate((params, params1), axis=0)
         params = np.delete(params, (0), axis=0)
         print params.shape
@@ -117,32 +118,38 @@ def FindCouplings():
     Output: -
     In order to optimize this function, the multiplication of all 'num' should be proportional to multiprocessing.cpu_count()
     """
-    l1v = np.linspace(l1min, l1max, num=48)
-    l2v = np.logspace(np.log10(l2min), np.log10(l2max), num=48)
-    l3v = np.linspace(l3min, l3max, num=48)
-    gxv = np.linspace(gxmin, gxmax, num=48)
+    l1v = np.linspace(l1min, l1max, num=50)
+    l2v = np.logspace(np.log10(l2min), np.log10(l2max), num=50)
+    l3v = np.linspace(l3min, l3max, num=50)
+    l4v = np.linspace(l4min, l4max, num=50)
+    l5v = np.linspace(l5min, l5max, num=50)
+    l6v = np.linspace(l6min, l6max, num=50)
+    gxv = np.linspace(gxmin, gxmax, num=50)
     p = multiprocessing.Pool()
     f = open(file_name, 'w+')
-    line = '|l1--l2--l3--gx--minima--mass1--mass2--stable|'
+    line = '|l1--l2--l3--l4--l5--l6--gx--minima--mass1--mass2--mass3--stable|'
     f.write(line+'\n')
     f.write('-'*90+'\n')
     f.close()
     for l1 in l1v:
         for l2 in l2v:
-            start_time_loop = time.time()
-            params = cartesian((l1, l2, l3v, gxv))
-            print params.shape
-            p.map(CheckCouplings, params)
-            print("--- Loop has taken: %s seconds ---" % (time.time() - start_time_loop))
+            for l3 in l3v:
+                for l4 in l4v:
+                    for l5 in l5v:
+                        start_time_loop = time.time()
+                        params = cartesian((l1, l2, l3, l4, l5, l6v, gxv))
+                        print params.shape
+                        p.map(CheckCouplings, params)
+                        print("--- Loop has taken: %s seconds ---" % (time.time() - start_time_loop))
 
 if __name__ == "__main__":
     warnings.filterwarnings("ignore", category=FutureWarning)
     start_time = time.time()
 
-    FindCouplings()
+    #FindCouplings()
 
-    #RandomFindCouplings()
+    RandomFindCouplings()
 
-    #CheckModel((0.124, -0.003, -0.0047, 0.85))
+    #CheckModel((0.1276, 0.0036, 0.004, 0.2257, 0.001, 0.06, 0.95))
 
     print("--- %s seconds ---" % (time.time() - start_time))
