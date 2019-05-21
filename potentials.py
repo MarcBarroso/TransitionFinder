@@ -130,66 +130,66 @@ class model_2f(generic_potential.generic_potential):
 
     def boson_massSq(self, X, T):
         """
-        Computation of the value of the boson masses squared.
-        Input: X - point in field space. T - temperature.
-        Output: M - array with the masses squared. c - renormalization constants. dof - degrees of freedom
-        """
-        XT = np.array(X)
-        X = XT.reshape(XT.size/2, 2) #Since we can overload our input by passing an array of points, we have to make sure to be dealing with it point by point.
-        m1  = np.empty([0,0])
-        m2  = np.empty([0,0])
-        mb1 = np.empty([0,0])
-        mb2 = np.empty([0,0])
-        mb3 = np.empty([0,0])
-        #ddV0 = nd.Hessian(self.V0) Uncomment this and the lines below if the hessian is to be computed numerically directly from V0
-        for vec in X:
-            phi1 = vec[0]
-            phi2 = vec[1]
+	Computation of the value of the boson masses squared.
+	Input: X - point in field space. T - temperature.
+	Output: M - array with the masses squared. c - renormalization constants. dof - degrees of freedom
+	"""
+	XT = np.array(X)
+	X = XT.reshape(XT.size/2, 2) #Since we can overload our input by passing an array of points, we have to make sure to be dealing with it point by point.
+	m1  = np.empty([0,0])
+	m2  = np.empty([0,0])
+	mb1 = np.empty([0,0])
+	mb2 = np.empty([0,0])
+	mb3 = np.empty([0,0])
+	#ddV0 = nd.Hessian(self.V0) Uncomment this and the lines below if the hessian is to be computed numerically directly from V0
+	for vec in X:
+	    phi1 = vec[0]
+	    phi2 = vec[1]
 
-            #hess = ddV0([phi1,phi2])
-            #print hess
-            #eigen =  np.linalg.eigvalsh(hess)
+	    #hess = ddV0([phi1,phi2])
+	    #print hess
+	    #eigen =  np.linalg.eigvalsh(hess)
 
-            MSQ = np.array([[3*self.l1*phi1*phi1+0.5*self.l2*phi2*phi2, self.l2*phi1*phi2], #We can compute the matrix of second derivatives by hand in this case
-                           [self.l2*phi1*phi2, 3*self.l3*phi2*phi2+0.5*self.l2*phi1*phi1]])
+	    MSQ = np.array([[3*self.l1*phi1*phi1+0.5*self.l2*phi2*phi2, self.l2*phi1*phi2], #We can compute the matrix of second derivatives by hand in this case
+		[self.l2*phi1*phi2, 3*self.l3*phi2*phi2+0.5*self.l2*phi1*phi1]])
 
-            eigen = np.linalg.eigvalsh(MSQ) #and just ask for the eigenvalues
+	    eigen = np.linalg.eigvalsh(MSQ) #and just ask for the eigenvalues
 
-            m1 = np.append(m1, eigen[0])
-            m2 = np.append(m2, eigen[1])
+	    m1 = np.append(m1, eigen[0])
+	    m2 = np.append(m2, eigen[1])
 
-            mb1 = np.append(mb1, (0.5*self.g*phi1)**2) #here we compute the mass of the gauge bosons
-            mb2 = np.append(mb2, (0.5*self.gp*phi1)**2 + (0.5*self.g*phi1)**2)
-            mb3 = np.append(mb3, (0.5*self.gx*phi2)**2)
+	    mb1 = np.append(mb1, (0.5*self.g*phi1)**2) #here we compute the mass of the gauge bosons
+	    mb2 = np.append(mb2, (0.5*self.gp*phi1)**2 + (0.5*self.g*phi1)**2)
+	    mb3 = np.append(mb3, (0.5*self.gx*phi2)**2)
 
-        if(X.shape[0] == 1): #PLACEHOLDER: just making sure that the end result is consistent
-            M = np.array([m1[0], m2[0], mb1[0], mb2[0], mb3[0]])
-        else:
-            M = np.array([m1, m2, mb1, mb2, mb3])
+	if(X.shape[0] == 1): #PLACEHOLDER: just making sure that the end result is consistent
+	    M = np.array([m1[0], m2[0], mb1[0], mb2[0], mb3[0]])
+	else:
+	    M = np.array([m1, m2, mb1, mb2, mb3])
 
-        # At this point, we have an array of boson masses, but each entry might
-        # be an array itself. This happens if the input X is an array of points.
-        # The generic_potential class requires that the output of this function
-        # have the different masses lie along the last axis, just like the
-        # different fields lie along the last axis of X, so we need to reorder
-        # the axes. The next line does this, and should probably be included in
-        # all subclasses.
-        M = np.rollaxis(M, 0, len(M.shape))
+	# At this point, we have an array of boson masses, but each entry might
+	# be an array itself. This happens if the input X is an array of points.
+	# The generic_potential class requires that the output of this function
+	# have the different masses lie along the last axis, just like the
+	# different fields lie along the last axis of X, so we need to reorder
+	# the axes. The next line does this, and should probably be included in
+	# all subclasses.
+	M = np.rollaxis(M, 0, len(M.shape))
 
-        # The number of degrees of freedom for the masses. This should be a
-        # one-dimensional array with the same number of entries as there are
-        # masses.
-        dof = np.array([1, 1, self.n1, self.n2, self.n3])
+	# The number of degrees of freedom for the masses. This should be a
+	# one-dimensional array with the same number of entries as there are
+	# masses.
+	dof = np.array([1, 1, self.n1, self.n2, self.n3])
 
-        # c is a constant for each particle used in the Coleman-Weinberg
-        # potential using MS-bar renormalization. It equals 1.5 for all scalars
-        # and the longitudinal polarizations of the gauge bosons, and 0.5 for
-        # transverse gauge bosons.
-        cnumb = 5.0/6.0
-        cnums = 1.5
-        c = np.array([cnums, cnums, cnumb, cnumb, cnumb])
+	# c is a constant for each particle used in the Coleman-Weinberg
+	# potential using MS-bar renormalization. It equals 1.5 for all scalars
+	# and the longitudinal polarizations of the gauge bosons, and 0.5 for
+	# transverse gauge bosons.
+	cnumb = 5.0/6.0
+	cnums = 1.5
+	c = np.array([cnums, cnums, cnumb, cnumb, cnumb])
 
-        return M, dof, c
+	return M, dof, c
 
     def Vtot_0T(self, X):
         return self.Vtot(X, 0.0)
@@ -538,7 +538,7 @@ class model_3f(generic_potential.generic_potential):
             q3 = -l6mp/(2.0*np.sqrt(l3mp*l4mp))
             condition1 = q1 <= 1 and q2 <= 1 and q3 <= 1 #2.7
             if condition1:
-                condition2 = q_1+q_2+q_3 <= 1 #2.9
+                condition2 = q1+q2+q3 <= 1 #2.9
                 if condition2:
                     return 1
         return 0

@@ -10,7 +10,7 @@ import numdifftools as nd
 import warnings
 import time
 
-file_name = '3fields_randsearch.txt' #name of the file where the points are going to be saved
+file_name = '3fields_random.txt' #name of the file where the points are going to be saved
 
 l1min = 0
 l1max = 0.2
@@ -21,11 +21,11 @@ l2max = 1e-10
 l3min = -0.02
 l3max = 0
 
-l4min = 0
-l4max = 0.1
+l4min = -0.2
+l4max = 0.2
 
-l5min = 0
-l5max = 0.1
+l5min = -0.2
+l5max = 0.2
 
 l6min = -0.2
 l6max = 0.2
@@ -33,24 +33,7 @@ l6max = 0.2
 gxmin = 0.2
 gxmax = 1
 
-def CheckModel(params):
-    """
-    Just checks the minima of the model m, the masses of the particles and whether it is stable or not
-    Input: model m
-    Output: prints the information
-    """
-    m = model_3f(params[0], params[1], params[2], params[3], params[4], params[5], y_t_interpol(np.log(v/mz)), params[6])
-
-    minima, success = m.findMinimum()
-    print "Minimum at T = 0.0: ", minima, success
-
-    print "Masses: "
-    ddVtot = nd.Hessian(m.Vtot_0T)
-    hess = ddVtot(minima)
-    print np.sqrt(np.linalg.eigvalsh(hess))
-    print 'Stable: ', m.CheckStability()
-
-def CheckCouplings(params):
+def CheckCouplings(params, verbose=False):
     """
     Checks whether the parameters sent in the array param correspond to a physical model (i.e. if one of the minima are close to the Higgs v (experimentally verified) and if one of the masses correspond to the Higgs mass (exp. verified as well).
     Input: params - array of l1, l2, l3 and gx.
@@ -65,27 +48,38 @@ def CheckCouplings(params):
     gx = params[6]
     m = model_3f(l1, l2, l3, l4, l5, l6, y_t_interpol(np.log(v/mz)), gx)
     minima, success = m.findMinimum() #the boolean success is added because we cannot trust the minima if numpy.optimize.minimize has failed
-    tolvevh = 2.0
-    tolmh = 2.0
-    condition0 = abs(minima-v) < tolvevh
-    if condition0.any() and success:
-    	ddVtot = nd.Hessian(m.Vtot_0T)
+    if not verbose:
+        tolvevh = 2.0
+        tolmh = 2.0
+        condition0 = abs(minima-v) < tolvevh
+        if condition0.any() and success:
+            ddVtot = nd.Hessian(m.Vtot_0T)
+            hess = ddVtot(minima)
+            try:
+                masses = np.linalg.eigvalsh(hess) #computes masses...
+                positive_condition = masses > 0
+            except LinAlgError:
+                positive_condition = np.array([False])
+            if(positive_condition.all()): #we will only check them IF they are positive
+                masses = np.sqrt(np.abs(masses))
+                condition1 = abs(masses-mh) < tolmh
+                if condition1.any():
+                    stability = m.CheckStability() #we check the stability of the model
+                    f = open(file_name, 'a')
+                    line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(l4)+' '+str(l5)+' '+str(l6)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(minima[2])+' '+str(masses[0])+' '+str(masses[1])+' '+str(masses[2])+' '+str(stability) #we print everything
+                    f.write(line0+'\n')
+                    f.write('-'*90+'\n')
+                    f.close()
+    else:
+        print "Minimum at T = 0.0: ", minima, success
+        print "Masses: "
+        ddVtot = nd.Hessian(m.Vtot_0T)
         hess = ddVtot(minima)
-        masses = np.linalg.eigvalsh(hess) #computes masses...
-        positive_condition = masses > 0
-        if(positive_condition.all()): #we will only check them IF they are positive
-            masses = np.sqrt(np.abs(masses))
-            condition1 = abs(masses-mh) < tolmh
-            if condition1.any():
-                stability = m.CheckStability() #we check the stability of the model
-                f = open(file_name, 'a')
-                line0 = str(l1)+' '+str(l2)+' '+str(l3)+' '+str(l4)+' '+str(l5)+' '+str(l6)+' '+str(gx)+' '+str(minima[0])+' '+str(minima[1])+' '+str(minima[2])+' '+str(masses[0])+' '+str(masses[1])+' '+str(masses[2])+' '+str(stability) #we print everything
-                f.write(line0+'\n')
-                f.write('-'*90+'\n')
-                f.close()
+        print np.sqrt(np.linalg.eigvalsh(hess))
+        print 'Stable: ', m.CheckStability()==1
 
 def RandomFindCouplings():
-    points = 20000
+    points = 1000000
     # Total points: points*multiprocessing.cpu_count()
     p = multiprocessing.Pool()
     f = open(file_name, 'w+')
@@ -118,13 +112,13 @@ def FindCouplings():
     Output: -
     In order to optimize this function, the multiplication of all 'num' should be proportional to multiprocessing.cpu_count()
     """
-    l1v = np.linspace(l1min, l1max, num=50)
-    l2v = np.logspace(np.log10(l2min), np.log10(l2max), num=50)
-    l3v = np.linspace(l3min, l3max, num=50)
-    l4v = np.linspace(l4min, l4max, num=50)
-    l5v = np.linspace(l5min, l5max, num=50)
-    l6v = np.linspace(l6min, l6max, num=50)
-    gxv = np.linspace(gxmin, gxmax, num=50)
+    l1v = np.linspace(l1min, l1max, num=48)
+    l2v = np.logspace(np.log10(l2min), np.log10(l2max), num=48)
+    l3v = np.linspace(l3min, l3max, num=48)
+    l4v = np.linspace(l4min, l4max, num=10)
+    l5v = np.linspace(l5min, l5max, num=10)
+    l6v = np.linspace(l6min, l6max, num=10)
+    gxv = np.linspace(gxmin, gxmax, num=48)
     p = multiprocessing.Pool()
     f = open(file_name, 'w+')
     line = '|l1--l2--l3--l4--l5--l6--gx--minima--mass1--mass2--mass3--stable|'
@@ -150,6 +144,6 @@ if __name__ == "__main__":
 
     RandomFindCouplings()
 
-    #CheckModel((0.1276, 0.0036, 0.004, 0.2257, 0.001, 0.06, 0.95))
+    #CheckCouplings((0.1276, 0.0036, 0.004, 0.2257, 0.001, 0.06, 0.95), True)
 
     print("--- %s seconds ---" % (time.time() - start_time))
